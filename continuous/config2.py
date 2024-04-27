@@ -25,19 +25,21 @@ For including the new merge (continuous and 3 lanes):
 """
 
 
-
 env = gym.make("merge-custom-v0", render_mode="rgb_array")
 
 config = {
     "observation": {
         "type": "Kinematics",
         "features": ['x', 'y', 'vx', 'vy', 'cos_h', 'sin_h'],
-        "scales": [100, 100, 5, 5, 1, 1],
+        "scales": [50, 50, 2, 2, 1, 1],
     },
     "action": {
         "type": "ContinuousAction",
+        "lateral": False
     },
     "vehicules_count": 1,
+    "acceleration_range": [-1,1],
+    "lateral": False,
     "simulation_frequency": 15,  # [Hz]
     "policy_frequency": 1,  # [Hz]
     "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
@@ -45,14 +47,17 @@ config = {
     "screen_height": 150,  # [px]
     "centering_position": [0.3, 0.5],
     "scaling": 5.5,
+    "speed_reward": 0.0001,
+    "accel_penalty": 0.0,
+    "collision_reward": -0.06,
+    "forward_reward": 0.001,
     "show_trajectories": False,
     "render_agent": True,
     "offscreen_rendering": False,
     "disable_collision_checks": False,
 }
 
-env.unwrapped.configure(config_merge)
-env.reset()
+
 
 
 env.unwrapped.configure(config)

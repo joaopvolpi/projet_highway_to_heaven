@@ -28,15 +28,21 @@ class MergeCustomEnv(AbstractEnv):
             {
                 "collision_reward": -1,
                 "right_lane_reward": 0.1,
-                "high_speed_reward": 0.2,
+                "high_speed_reward": 0.2,   
                 "reward_speed_range": [20, 30],
+                "reward_heading_range": [-0.01, 0.01],
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": -0.05,
+                "speed_reward": 1.0,
+                "turning_penalty": - 0.5,
+                "accel_penalty": 0.5,
+                "forward_reward": 0.5,
+                "off_road_penalty": -2,
             }
         )
         return cfg
 
-    def _reward(self, action: int) -> float:
+    def _reward(self, action) -> float:
         """
         The vehicle is rewarded for driving with high speed on lanes to the right and avoiding collisions
 
@@ -45,25 +51,36 @@ class MergeCustomEnv(AbstractEnv):
         :param action: the action performed
         :return: the reward of the state-action transition
         """
-        reward = sum(
-            self.config.get(name, 0) * reward
-            for name, reward in self._rewards(action).items()
-        )
-        return utils.lmap(
-            reward,
-            [
-                self.config["collision_reward"] + self.config["merging_speed_reward"],
-                self.config["high_speed_reward"] + self.config["right_lane_reward"],
-            ],
-            [0, 1],
-        )
+        
+    
+        
+        # Extract parameters
+        collision = self.vehicle.crashed
+        speed = self.vehicle.speed
+        acceleration = action[0]
+        x_position = self.vehicle.position[0]  # assuming position is a 2D vector (x, y)
+        
+        #turn = action[1]
+
+        # Define rewards and penalties
+        speed_reward = self.config['speed_reward'] * speed
+        accel_penalty = self.config['accel_penalty'] * abs(acceleration)
+        forward_reward = self.config['forward_reward'] * x_position
+        collision_penalty = self.config['collision_reward'] * collision
+        
+
+        # Calculate reward
+        reward =   accel_penalty + forward_reward + collision_penalty  + speed_reward
+
+        return reward
+        
+        
 
     def _rewards(self, action) -> Dict[Text, float]:
         scaled_speed = utils.lmap(
             self.vehicle.speed, self.config["reward_speed_range"], [0, 1]
         )
-        if type(action) == ndarray:
-            action = action[1]
+        
         return {
             "collision_reward": self.vehicle.crashed,
             "right_lane_reward": self.vehicle.lane_index[2] / 1,
@@ -81,7 +98,7 @@ class MergeCustomEnv(AbstractEnv):
         """The episode is over when a collision occurs or when the access ramp has been passed."""
         #print("crash" + str(self.vehicle.crashed))
         #print("over" + str(self.vehicle.position[0] > 370))
-        return self.vehicle.crashed or bool(self.vehicle.position[0] > 370)
+        return self.vehicle.crashed or bool(self.vehicle.position[0] > 370) or not self.vehicle.on_road
 
     def _is_truncated(self) -> bool:
         return False
@@ -166,18 +183,23 @@ class MergeCustomEnv(AbstractEnv):
         """
         road = self.road
         ego_vehicle = self.action_type.vehicle_class(
-            road, road.network.get_lane(("a", "b", 1)).position(30, 0), speed=30
+            road, road.network.get_lane(("a", "b", 2)).position(30, 0), speed=30
         )
         road.vehicles.append(ego_vehicle)
 
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-
-        for position, speed in [(90, 29), (70, 31), (5, 31.5)]:
-            lane = road.network.get_lane(("a", "b", self.np_random.integers(2)))
-            position = lane.position(position + self.np_random.uniform(-5, 5), 0)
-            speed += self.np_random.uniform(-1, 1)
-            road.vehicles.append(other_vehicles_type(road, position, speed=speed))
-
+        
+        # Front vehicle
+        
+        front_vehicle_position = ego_vehicle.position[0] + 50  
+        front_vehicle = other_vehicles_type(
+            road, road.network.get_lane(("a", "b", 2)).position(front_vehicle_position, 0), speed=30
+        )
+        road.vehicles.append(front_vehicle)
+        
+        
+        # Merging vehicle
+        
         merging_v = other_vehicles_type(
             road, road.network.get_lane(("j", "k", 0)).position(110, 0), speed=20
         )
